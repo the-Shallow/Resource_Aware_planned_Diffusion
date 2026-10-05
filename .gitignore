@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environments and local configuration
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Build products
+build/
+dist/
+*.egg-info/
+CMakeFiles/
+CMakeCache.txt
+cmake-build-*/
+
+# Model and dataset caches
+.cache/
+huggingface/
+checkpoints/
+models/
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# Experiment output
+outputs/
+results/
+logs/
+wandb/
+slurm-*.out
+slurm-*.err
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local scratch space
+tmp/
+scratch/

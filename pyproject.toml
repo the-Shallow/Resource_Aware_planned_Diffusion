@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "resource-aware-planned-diffusion"
+version = "0.1.0"
+description = "Resource-aware multi-GPU semantic parallelism for Planned Diffusion"
+requires-python = ">=3.10,<3.11"
+dynamic = ["dependencies"]
+
+[tool.setuptools]
+packages = [
+    "semantic_parallel",
+    "semantic_parallel.distributed",
+    "semantic_parallel.profiling",
+    "semantic_parallel.scheduler",
+]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

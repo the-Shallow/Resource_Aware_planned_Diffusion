@@ -1,4 +1,27 @@
-## Planned Diffusion
+# Resource-Aware Multi-GPU Semantic Parallelism for Planned Diffusion
+
+CSC 548 Parallel Systems final project by Khush Patel and Rishabh Ravi Kumar.
+
+This repository extends the official Planned Diffusion implementation to study
+whether semantically independent chunks from **one response** can be scheduled
+across 1, 2, or 4 GPUs. The intended design keeps planning and Dream-7B
+inference in Python/PyTorch and adds a small C++ scheduling component.
+
+The distributed implementation has not started yet. The current repository is
+a collaboration-ready upstream baseline plus the completed codebase analysis.
+
+Project documentation:
+
+- [Codebase analysis and implementation plan](CODEBASE_ANALYSIS.md)
+- [Developer setup and repository handoff](docs/PROJECT_SETUP.md)
+- [Contribution workflow](CONTRIBUTING.md)
+- [Project-module boundaries](semantic_parallel/README.md)
+
+The original upstream README follows unchanged below.
+
+---
+
+## Planned Diffusion (upstream)
 
 This is the official repository for Planned Diffusion.
 

@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--steps_ratio", type=float, default=1.0, help="Number of steps to generate.")
     parser.add_argument("--confidence_threshold", type=float, default=None, help="Confidence threshold for confidence threshold algorithm.")
     parser.add_argument("--use_cache", action="store_true", help="Use cache for generation.")
+    parser.add_argument("--use_fp16", action="store_true", help="Use float16 instead of bfloat16 on CUDA.")
     parser.add_argument("--length_scale", type=float, default=None, help="Scale factor for async block lengths (None to use default 10).")
     parser.add_argument("--disable_block_sparsity", action="store_true", help="Disable block sparsity; use dense attention within generated blocks.")
     args = parser.parse_args()
@@ -52,7 +53,7 @@ def main():
         disable_block_sparsity=args.disable_block_sparsity
     )
 
-    model = model.eval()
+    model = model.to(device).eval()
 
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -65,9 +66,14 @@ def main():
         tokenize=True
     ).to(device)
 
+    print("============ Input Prompt ============\n")
+    print(inputs)
+
     
     def generation_tokens_hook_func(step, x, logits):
         print(f"############ Step {step} ############")
+        print(f"Generated tokens: {x}")
+        print(f"Generated text: {tokenizer.decode(x[0].tolist())}")
         print(tokenizer.decode(x[0].tolist()).split(tokenizer.eos_token)[0].replace(tokenizer.mask_token, "[M]"))
         return x
     
