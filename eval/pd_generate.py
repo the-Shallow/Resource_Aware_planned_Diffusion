@@ -5,6 +5,8 @@ from dream.modeling_dream import DreamModel
 from dream.control_tags import *
 import time
 import re
+import json
+from pathlib import Path
 
 def main():
     """
@@ -27,6 +29,8 @@ def main():
     parser.add_argument("--use_fp16", action="store_true", help="Use float16 instead of bfloat16 on CUDA.")
     parser.add_argument("--length_scale", type=float, default=None, help="Scale factor for async block lengths (None to use default 10).")
     parser.add_argument("--disable_block_sparsity", action="store_true", help="Disable block sparsity; use dense attention within generated blocks.")
+    # parser.add_argument("--quiet_steps", action="store_true", help="Do not print intermediate generation steps.")
+    parser.add_argument("--metrics_json", action="store_true", help="Optional path for structured JSON metrics.")
     args = parser.parse_args()
     
     
@@ -71,14 +75,22 @@ def main():
 
     
     def generation_tokens_hook_func(step, x, logits):
-        print(f"############ Step {step} ############")
-        print(f"Generated tokens: {x}")
-        print(f"Generated text: {tokenizer.decode(x[0].tolist())}")
-        print(tokenizer.decode(x[0].tolist()).split(tokenizer.eos_token)[0].replace(tokenizer.mask_token, "[M]"))
+        # print(f"############ Step {step} ############")
+        # print(f"Generated tokens: {x}")
+        # print(f"Generated text: {tokenizer.decode(x[0].tolist())}")
+        # print(tokenizer.decode(x[0].tolist()).split(tokenizer.eos_token)[0].replace(tokenizer.mask_token, "[M]"))
         return x
+
+    if device == "cuda":
+        torch.cuda.synchronize()
+        torch.cuda.reset_peak_memory_stats()
+
+        memory_before = torch.cuda.memory_allocated()
+    else:
+        memory_before = 0
     
-    
-    start_time = time.time()
+    # start_time = time.time()
+    start_time = time.perf_counter()
     with torch.no_grad():
         
         output = model.planned_diffusion_generate(
@@ -94,10 +106,56 @@ def main():
             length_scale=args.length_scale,
             generation_tokens_hook_func=generation_tokens_hook_func
         )
+
+    if device == "cuda":
+        torch.cuda.synchronize()
         
-    end_time = time.time()
-    tokens_generated = output.sequences.shape[1] - inputs.shape[1]
+    end_time = time.perf_counter()
+
+    if device == "cuda":
+        peak_memory = torch.cuda.max_memory_allocated()
+    else:
+        peak_memory = 0
     
+    elapsed_seconds = end_time - start_time
+
+    structured_stages = []
+
+    for stage in output.stage_metadata:
+        stage_record = dict(stage)
+        stage_record["planning_text"] = tokenizer.decode(
+            stage["planning_token_ids"],
+            skip_special_tokens=False,
+        )
+
+        del stage_record["planning_token_ids"]
+        structured_stages.append(stage_record)
+    
+    tokens_generated = output.sequences.shape[1] - inputs.shape[1]
+    tokens_per_second = (
+        tokens_generated / elapsed_seconds if elapsed_seconds > 0 else None
+    )
+
+    metrics = {
+        "model_path": args.model_path,
+        "prompt": args.prompt,
+        "device": device,
+        "dtype": str(dtype),
+        "random_seed": args.random_seed,
+        "max_length": args.max_length,
+        "steps_ratio": args.steps_ratio,
+        "length_scale": args.length_scale,
+        "use_cache": args.use_cache,
+        "disable_block_sparsity": args.disable_block_sparsity,
+        "input_tokens": inputs.shape[1],
+        "tokens_generated": tokens_generated,
+        "latency_seconds": elapsed_seconds,
+        "tokens_per_second": tokens_per_second,
+        "memory_before_bytes": memory_before,
+        "peak_memory_allocated_bytes": peak_memory,
+        "peak_memory_allocated_gib": peak_memory / (1024 ** 3),
+        "stages": structured_stages
+    }
     output_ids = output.sequences
     
     generated_text = tokenizer.decode(
@@ -123,6 +181,18 @@ def main():
     print(f"Time taken: {end_time - start_time} seconds")
     print(f"Tokens generated: {tokens_generated}")
     print(f"Tokens per second: {tokens_generated / (end_time - start_time)}")
+
+    if device == "cuda":
+        print(f"Peak memory allocated: {peak_memory / (1024 ** 3)} GiB")
+
+    if args.metrics_json:
+        metrics_path = Path(args.metrics_json)
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with metrics_path.open("w", encoding="utf-8") as f:
+            json.dump(metrics, f, indent=2)
+
+        print(f"Metrics saved to {metrics_path}")
     
 
 

@@ -37,6 +37,7 @@ from transformers.utils import (
 from .pd_utils import create_pd_inputs, update_attention_mask, invert_and_expand_attention_mask, block_unmask, block_unmask_confidence_threshold
 from .control_tags import *
 import math
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 logger = logging.get_logger(__name__)
 
@@ -116,6 +117,8 @@ class DreamModelOutput(ModelOutput):
 class PlannedDiffusionModelOutput(ModelOutput):
     sequences: torch.LongTensor = None
     scaffold: Optional[torch.LongTensor] = None
+    stage_metadata: Optional[List[Dict[str, Any]]] = None
+    
 
 
 class DreamGenerationConfig(GenerationConfig):
@@ -436,6 +439,8 @@ class DreamGenerationMixin:
         
         curr_attention_mask = None
         curr_input_ids = input_ids
+
+        stage_metadata = []
         while not end_of_generation:
         
             # 4. Autoregressive generation until im_end token
@@ -456,6 +461,8 @@ class DreamGenerationMixin:
             final_planning_input_id = curr_input_ids[:, -1]
             curr_input_ids = curr_input_ids[:, :-1]
             curr_attention_mask = curr_attention_mask[:, :-1, :-1]
+
+            planning_token_ids = curr_input_ids.clone()
             
             # Create block attention mask
             length_scale = kwargs.get("length_scale", None)
@@ -482,6 +489,24 @@ class DreamGenerationMixin:
             # generation_config.steps = rounded_steps
             
             generation_config.steps = int(max_block_size * generation_config.steps_ratio)
+
+            stage_metadata.append({
+                "stage_id": len(stage_metadata),
+                "planning_token_ids": planning_token_ids[0].detach().cpu().tolist(),
+                "num_promises": num_promises,
+                "blocks": [
+                    {
+                        "chunk_id": chunk_id,
+                        "start": start,
+                        "end_exclusive": end,
+                        "predicted_content_length": block_size
+                    }
+                    for chunk_id, (start, end, block_size) in enumerate(block_info)
+                ],
+                "max_block_size": max_block_size,
+                "diffusion_steps": generation_config.steps,
+                "steps_ratio": generation_config.steps_ratio,
+            })
 
             ar_template = curr_input_ids.clone()
             
@@ -516,7 +541,8 @@ class DreamGenerationMixin:
         if generation_config.return_dict_in_generate:
             return PlannedDiffusionModelOutput(
                 sequences=curr_input_ids,
-                scaffold=ar_template 
+                scaffold=ar_template,
+                stage_metadata=stage_metadata,
             )
         else:
             return curr_input_ids
