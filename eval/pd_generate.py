@@ -30,7 +30,7 @@ def main():
     parser.add_argument("--length_scale", type=float, default=None, help="Scale factor for async block lengths (None to use default 10).")
     parser.add_argument("--disable_block_sparsity", action="store_true", help="Disable block sparsity; use dense attention within generated blocks.")
     # parser.add_argument("--quiet_steps", action="store_true", help="Do not print intermediate generation steps.")
-    parser.add_argument("--metrics_json", action="store_true", help="Optional path for structured JSON metrics.")
+    parser.add_argument("--metrics_json", type=str, help="Optional path for structured JSON metrics.")
     args = parser.parse_args()
     
     
