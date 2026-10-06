@@ -3,6 +3,30 @@ import torch.nn.functional as F
 from typing import Optional
 from .control_tags import ASYNC_START, ASYNC_END, PROMISE_START, PROMISE_END, SYNC_TOKEN_ID, MASK_TOKEN_ID
 
+# def parse_promises(promise, length_scale: Optional[float] = None,):
+#     parsed_promises = []
+#     block_sizes = []
+#     number_tokens = {15: 0, 16: 1, 17: 2, 18: 3, 19: 4, 20: 5, 21: 6, 22: 7, 23: 8, 24: 9}
+#     for i, token in enumerate(promise):
+#         if token.item() in number_tokens:
+#             topic_token_ids = tuple(promise[:i].tolist())
+#             number = number_tokens[token.item()]
+#             # Check if next token is also a number (two-digit case)
+#             if i + 1 < len(promise) and promise[i + 1].item() in number_tokens:
+#                 second_digit = number_tokens[promise[i + 1].item()]
+#                 number = number * 10 + second_digit
+#             break
+
+#         if length_scale is not None:
+#             block_size = int(number * length_scale)
+#         else:
+#             block_size = number * 10
+#         block_sizes.append(block_size)
+
+#     return topic_token_ids, block_sizes
+
+
+
 def create_pd_inputs(
     input_ids: torch.Tensor,
     prev_attention_mask: Optional[torch.Tensor],

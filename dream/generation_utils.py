@@ -38,6 +38,7 @@ from .pd_utils import create_pd_inputs, update_attention_mask, invert_and_expand
 from .control_tags import *
 import math
 from typing import Any, Dict, List, Optional, Tuple, Union
+from semantic_parallel.stage import ChunkTask, PlannedStage
 
 logger = logging.get_logger(__name__)
 
@@ -490,36 +491,61 @@ class DreamGenerationMixin:
             
             generation_config.steps = int(max_block_size * generation_config.steps_ratio)
 
+            tasks = [
+                ChunkTask(
+                    chunk_id=chunk_id,
+                    content_length=block_size,
+                    start=start,
+                    end_exclusive=end
+                )
+                for chunk_id, (start, end, block_size) in enumerate(block_info)
+            ]
+
+            stage = PlannedStage(
+                stage_id=len(stage_metadata),
+                prefix=planning_token_ids,
+                full_sequence=curr_input_ids,
+                attention_mask=curr_attention_mask,
+                tasks=tasks,
+                diffusion_steps=generation_config.steps,
+                terminator_token_id=final_planning_input_id.item(),
+            )
+
             stage_metadata.append({
-                "stage_id": len(stage_metadata),
-                "planning_token_ids": planning_token_ids[0].detach().cpu().tolist(),
-                "num_promises": num_promises,
+                "stage_id": stage.stage_id,
+                "planning_token_ids": stage.prefix[0].detach().cpu().tolist(),
+                "num_promises": len(stage.tasks),
                 "blocks": [
                     {
-                        "chunk_id": chunk_id,
-                        "start": start,
-                        "end_exclusive": end,
-                        "predicted_content_length": block_size
+                        "chunk_id": task.chunk_id,
+                        "start": task.start,
+                        "end_exclusive": task.end_exclusive,
+                        "predicted_content_length": task.content_length
                     }
-                    for chunk_id, (start, end, block_size) in enumerate(block_info)
+                    # for chunk_id, (start, end, block_size) in enumerate(block_info)
+                    for task in stage.tasks
                 ],
                 "max_block_size": max_block_size,
-                "diffusion_steps": generation_config.steps,
+                "diffusion_steps": stage.diffusion_steps,
                 "steps_ratio": generation_config.steps_ratio,
             })
 
-            ar_template = curr_input_ids.clone()
+            # ar_template = curr_input_ids.clone()
+            ar_template = stage.full_sequence.clone()
             
             # 6. Run diffusion over async blocks
             result = self._diff_sample(
-                curr_input_ids,
-                attention_mask=curr_attention_mask,
+                stage.full_sequence,
+                attention_mask=stage.attention_mask,
                 generation_config=generation_config,
                 generation_tokens_hook_func=generation_tokens_hook_func,
                 generation_logits_hook_func=generation_logits_hook_func,
                 format_inputs=False,
                 threshold=kwargs.get("threshold", None),
-                block_info=block_info
+                block_info=[
+                    (task.start, task.end_exclusive, task.content_length)
+                    for task in stage.tasks
+                ]
             )
             
             if final_planning_input_id.item() == SYNC_TOKEN_ID:
