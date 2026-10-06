@@ -21,5 +21,8 @@ namespace semantic_parallel::scheduler {
         std::int64_t worker_count
     );
 
-
+    std::vector<WorkerAssignment> schedule_lpt(
+        const std::vector<TaskSpec>& tasks,
+        std::int64_t worker_count
+    );
 }

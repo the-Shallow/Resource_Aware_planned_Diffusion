@@ -7,6 +7,7 @@ namespace py = pybind11;
 using semantic_parallel::scheduler::TaskSpec;
 using semantic_parallel::scheduler::WorkerAssignment;
 using semantic_parallel::scheduler::schedule_round_robin;
+using semantic_parallel::scheduler::schedule_lpt;
 
 PYBIND11_MODULE(_scheduler_native, module){
     module.doc() = "Native scheduling policies for semantic parallelism";
@@ -31,6 +32,13 @@ PYBIND11_MODULE(_scheduler_native, module){
     module.def(
         "schedule_round_robin",
         &schedule_round_robin,
+        py::arg("tasks"),
+        py::arg("worker_count")
+    );
+
+    module.def(
+        "schedule_lpt",
+        &schedule_lpt,
         py::arg("tasks"),
         py::arg("worker_count")
     );

@@ -12,9 +12,10 @@ class WorkerAssignment:
     chunk_ids: tuple[int, ...]
     estimated_load: float
 
-def schedule_round_robin(
+def _schedule(
     tasks: Sequence[ChunkTask],
-    worker_count: int
+    worker_count: int,
+    policy_name: str,
 ):
     try:
         from . import _scheduler_native
@@ -31,10 +32,8 @@ def schedule_round_robin(
         for task in tasks
     ]
 
-    native_assignments = _scheduler_native.schedule_round_robin(
-        native_tasks,
-        worker_count
-    )
+    native_policy = getattr(_scheduler_native, policy_name)
+    native_assignments = native_policy(native_tasks, worker_count)
 
     return [
         WorkerAssignment(
@@ -44,3 +43,15 @@ def schedule_round_robin(
         )
         for assignment in native_assignments
     ]
+
+def schedule_round_robin(
+        tasks: Sequence[ChunkTask],
+        worker_count:int
+):
+    return _schedule(tasks, worker_count, "schedule_round_robin")
+
+def schedule_lpt(
+        tasks: Sequence[ChunkTask],
+        worker_count:int
+):
+    return _schedule(tasks, worker_count, "schedule_lpt")
