@@ -222,14 +222,21 @@ asynchronous.
   length scaling with synthetic token tensors.
 - Make combined generation consume the extracted stage without token changes.
 
-### Checkpoint 2 - C++ scheduler and mock runtime
+### Checkpoint 2 - C++ scheduler and local thread runtime
 
 - Implement standalone C++ round-robin and LPT policies plus estimated worker
   loads; expose them with pybind11 or a small PyTorch extension.
 - Unit-test empty inputs, workers greater than tasks, ties, invalid costs, and
   the proposal's `120/80/35/20` example.
-- Add a CPU sleep/mock executor for 1/2/4 workers and validate barriers,
-  reconstruction, speedup, idle time, and machine-readable metrics.
+- Implement a reusable static-stage workflow for assignment validation, worker
+  execution, stage completion, gathering, and reconstruction by `chunk_id`.
+- Exercise that workflow locally with one CPU thread per worker and an injected
+  sleep-based executor for 1/2/4 workers. Validate barriers, reconstruction,
+  speedup, idle time, and machine-readable metrics.
+- Keep the execution backend separate from the shared workflow. Checkpoint 4
+  replaces local threads and ordinary return values with `torchrun` ranks and
+  distributed collectives while retaining the task, assignment, validation,
+  reconstruction, and metrics contracts.
 
 ### Checkpoint 3 - isolated single-GPU oracle
 
@@ -392,7 +399,7 @@ At this checkpoint, the program still sends the combined sequence to one GPU. We
 Checkpoint 1 answers:
 Exactly what independent tasks exist, where do they belong in the sequence, and how can a scheduler refer to them safely?
 
-Checkpoint 2 — C++ scheduler and mock runtime
+Checkpoint 2 — C++ scheduler and local thread runtime
 Now that we have explicit tasks, we can build the scheduler without involving the 7B model or GPUs.
 For our example:
 Task A cost: 20
@@ -401,8 +408,8 @@ Workers:     2
 The scheduler produces assignments:
 Worker 0 → Task B, estimated load 50
 Worker 1 → Task A, estimated load 20
-A simple mock executor replaces GPU computation with sleeping:
-def mock_execute(task):
+A simple simulated executor stands in for chunk computation:
+def execute_task(task, worker_id):
     time.sleep(task.content_length * 0.01)
     return f"result-{task.chunk_id}"
 Therefore:
@@ -424,6 +431,21 @@ After execution, results must be reconstructed by chunk_id, not completion time.
 [prefix | result of Task A | result of Task B]
 not:
 [prefix | result of Task B | result of Task A]
+
+The local runtime is an incremental implementation of the final stage workflow,
+not disposable benchmark code. It validates this sequence:
+tasks → assignments → worker execution → stage completion → gather → ordered reconstruction.
+The executor is injected, so checkpoint 2 can use sleeping without embedding
+simulation behavior in the runtime itself. Shared validation and reconstruction
+remain useful in the multi-GPU path.
+
+The worker backend changes in checkpoint 4. The local version uses threads that
+share Python memory and return values normally. The multi-GPU version uses one
+`torchrun` process per GPU, broadcasts assignments from rank 0, synchronizes
+ranks with distributed collectives, and gathers results back to rank 0. That
+later checkpoint must additionally validate serialization, tensor placement,
+rank failure handling, CUDA synchronization, and isolated-chunk correctness.
+
 Scheduling policies
 Checkpoint 2 initially implements two policies:
 - Round robin: distribute tasks successively across workers.
@@ -431,11 +453,11 @@ Checkpoint 2 initially implements two policies:
 For a more revealing example from the analysis:
 Task costs: 120, 80, 35, 20
 Workers: 2
-A balanced LPT assignment is:
-Worker 0: 120 + 20 = 140
-Worker 1: 80 + 35  = 115
+A deterministic LPT assignment is:
+Worker 0: 120 = 120
+Worker 1: 80 + 35 + 20 = 135
 Estimated completion time:
-max(140, 115) = 140
+max(120, 135) = 135
 The scheduler must also handle:
 - zero tasks;
 - more workers than tasks;
@@ -455,5 +477,5 @@ Checkpoint 1
 Convert token-embedded plans into explicit stages and tasks
         ↓
 Checkpoint 2
-Schedule those tasks using a mock parallel runtime
+Schedule those tasks using a local thread runtime with an injected simulated executor
 After these three checkpoints, we still have not executed separate chunks on separate GPUs. That begins only after Checkpoint 3 proves that isolated chunk execution produces the same result as combined single-GPU execution.
