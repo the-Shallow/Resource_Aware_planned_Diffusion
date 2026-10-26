@@ -7,8 +7,30 @@ whether semantically independent chunks from **one response** can be scheduled
 across 1, 2, or 4 GPUs. The intended design keeps planning and Dream-7B
 inference in Python/PyTorch and adds a small C++ scheduling component.
 
-The distributed implementation has not started yet. The current repository is
-a collaboration-ready upstream baseline plus the completed codebase analysis.
+## Project status
+
+The project has moved beyond the upstream baseline. The repository currently
+includes:
+
+- Non-cached planned-stage and chunk-task extraction.
+- C++ round-robin and longest-processing-time (LPT) scheduling, exposed through
+  a Python adapter.
+- A local threaded runtime for assigning tasks, executing them through an
+  injected executor, gathering results, and reconstructing output in chunk
+  order.
+- A simulation and CPU-side tests for stage extraction, scheduling, and local
+  runtime behavior.
+
+These components establish the scheduling workflow, but they do not yet execute
+chunks on multiple GPUs. The next correctness gate is to validate stage
+extraction against the original generation path and implement isolated chunk
+execution with the original logical position IDs. After that, the project can
+add a one-stage `torchrun` path, extend it across synchronization stages, and
+measure performance on 1, 2, and 4 GPUs. Cached multi-GPU execution and
+profile-based cost scheduling remain later work.
+
+See the [codebase analysis and implementation plan](CODEBASE_ANALYSIS.md) for
+the checkpoint details and correctness risks.
 
 Project documentation:
 
